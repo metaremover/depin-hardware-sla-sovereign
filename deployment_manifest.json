@@ -1,0 +1,20 @@
+{
+  "contract_name": "DePINHardwareSlaSovereign",
+  "contract_address": "0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc",
+  "transaction_hash": "0x7577334f176cb3e5b30d52df0624da14741911dd4d0b75241476af086d580f7e",
+  "network": "GenLayer Studio Testnet",
+  "rpc_endpoint": "https://studio.genlayer.com/api",
+  "explorer_url": "https://explorer-studio.genlayer.com/address/0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc",
+  "deployer_address": "0x9FB000B2f5720056e2552508906bEDefAcE805FE",
+  "deployed_at_utc": "2026-09-21T16:54:18.916Z",
+  "receipt_status": 7,
+  "genesis_verification": {
+    "total_nodes": 2,
+    "total_leases": 2,
+    "total_challenges": 1,
+    "total_slashed": 1,
+    "total_collateral_wei": "2000000000000",
+    "node_2_h100_tier_3_compliance": true,
+    "node_1_slashed_compliance": false
+  }
+}
