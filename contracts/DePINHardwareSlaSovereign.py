@@ -258,10 +258,7 @@ class DePINHardwareSlaSovereign(gl.Contract):
     # Security Helpers & Non-Admin Time Resolver
     # --------------------------------------------------------------------------
     def _get_current_time(self) -> int:
-        try:
-            return int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-        except Exception:
-            return int(datetime.datetime.now().timestamp())
+        return int(datetime.datetime.now(datetime.timezone.utc).timestamp())
 
     def _validate_eth_address(self, addr: str, field_name: str) -> str:
         clean = addr.strip().strip('"').strip("'").lower()
@@ -408,9 +405,6 @@ class DePINHardwareSlaSovereign(gl.Contract):
         clean_op = self._validate_eth_address(operator, "Operator")
         clean_node = self._validate_eth_address(node_address, "Node address")
 
-        assert clean_node != clean_op, \
-            "[ERR_SELF_REGISTRATION] Operator address cannot be identical to node execution address."
-
         assert clean_node not in self.nodes, \
             "[ERR_NODE_EXISTS] Hardware node address is already registered."
 
@@ -485,6 +479,9 @@ class DePINHardwareSlaSovereign(gl.Contract):
         assert node_rec.status != "SLASHED_JAILED", \
             "[ERR_NODE_SLASHED] Node is currently SLASHED_JAILED due to prior fraud. Lease rejected."
 
+        assert node_rec.active_lease_id == "NONE", \
+            "[ERR_ACTIVE_LEASE_EXISTS] Node already has an active or pending lease. Await expiry or settlement."
+
         clean_tier = target_tier.strip().upper()
         min_required_stake = self._get_min_stake_for_tier(clean_tier)
 
@@ -540,6 +537,8 @@ class DePINHardwareSlaSovereign(gl.Contract):
 
         self.leases[l_id] = lease_rec
         self.leases_by_hash[lease_hash] = l_id
+        node_rec.active_lease_id = l_id
+        self.nodes[clean_node] = node_rec
         self.total_leases_created += 1
         self.total_collateral_locked += escrowed_stake
 
@@ -786,8 +785,15 @@ class DePINHardwareSlaSovereign(gl.Contract):
             "[ERR_NODE_NOT_FOUND] Target node is not registered."
 
         node_rec = self.nodes[clean_node]
-        assert node_rec.status != "SLASHED_JAILED", \
-            "[ERR_NODE_ALREADY_SLASHED] Hardware node is already SLASHED_JAILED."
+        assert node_rec.status == "ACTIVE" and node_rec.active_lease_id != "NONE", \
+            "[ERR_NODE_NOT_ACTIVE] Challenges can only target active nodes with certified leases."
+
+        assert node_rec.active_lease_id in self.leases, \
+            "[ERR_LEASE_NOT_FOUND] Target node does not have an active lease record."
+
+        active_lease = self.leases[node_rec.active_lease_id]
+        assert active_lease.status == "ACTIVE_CERTIFIED", \
+            "[ERR_LEASE_NOT_CERTIFIED] Target node does not possess an active certified lease."
 
         assert clean_challenger != node_rec.operator, \
             "[ERR_OPERATOR_CHALLENGE] Operator cannot challenge their own node."
@@ -977,23 +983,29 @@ class DePINHardwareSlaSovereign(gl.Contract):
         c_rec.adjudication_rationale = rationale_candidate
 
         if verdict_candidate == "SLA_BREACH_CONFIRMED":
+            active_lid = node_rec.active_lease_id
             node_rec.status = "SLASHED_JAILED"
             node_rec.active_tier = "REVOKED"
+            node_rec.active_lease_id = "NONE"
             node_rec.sla_reliability_score = u256(0)
             node_rec.jail_reason = "SLA breach challenge " + c_id + " confirmed: " + rationale_candidate
             self.total_slashed_nodes += 1
 
             slashed_op_collateral = 0
-            if node_rec.active_lease_id != "NONE" and node_rec.active_lease_id in self.leases:
-                active_l = self.leases[node_rec.active_lease_id]
+            full_lease_stake = 0
+            residual_fee = 0
+            if active_lid != "NONE" and active_lid in self.leases:
+                active_l = self.leases[active_lid]
                 if active_l.status == "ACTIVE_CERTIFIED":
                     active_l.status = "REVOKED_SLASHED"
                     active_l.is_consumed = True
                     active_l.consumed_by = c_rec.challenger
                     self.consumed_lease_hashes[active_l.lease_hash.lower()] = True
+                    full_lease_stake = int(active_l.escrowed_stake)
                     # Slash 90% of operator collateral to challenger
-                    slashed_op_collateral = (int(active_l.escrowed_stake) * 90) // 100
-                    self.leases[node_rec.active_lease_id] = active_l
+                    slashed_op_collateral = (full_lease_stake * 90) // 100
+                    residual_fee = full_lease_stake - slashed_op_collateral
+                    self.leases[active_lid] = active_l
 
             challenger_payout = int(c_rec.challenge_bond) + slashed_op_collateral
             payout_u256 = u256(challenger_payout)
@@ -1003,9 +1015,17 @@ class DePINHardwareSlaSovereign(gl.Contract):
             self.consumed_challenge_hashes[c_rec.challenge_hash.lower()] = True
             self.total_successful_bounties += 1
 
-            total_deducted = int(c_rec.challenge_bond) + slashed_op_collateral
+            # Retain 10% residual fee to protocol owner claimable balance
+            if residual_fee > 0:
+                current_owner_claimable = int(self.claimable_balances.get(self.owner, u256(0)))
+                self.claimable_balances[self.owner] = u256(current_owner_claimable + residual_fee)
+
+            # Deduct full 100% of lease stake + challenger bond
+            total_deducted = int(c_rec.challenge_bond) + full_lease_stake
             if int(self.total_collateral_locked) >= total_deducted:
                 self.total_collateral_locked -= u256(total_deducted)
+            else:
+                self.total_collateral_locked = u256(0)
 
             try:
                 target = gl.get_contract_at(c_rec.challenger)
@@ -1026,11 +1046,20 @@ class DePINHardwareSlaSovereign(gl.Contract):
             c_rec.is_consumed = True
             self.consumed_challenge_hashes[c_rec.challenge_hash.lower()] = True
 
+            # Reward innocent operator with the slashed challenge bond
+            bond_val = int(c_rec.challenge_bond)
+            op_claimable = int(self.claimable_balances.get(node_rec.operator, u256(0)))
+            self.claimable_balances[node_rec.operator] = u256(op_claimable + bond_val)
+
+            # Deduct bond from locked collateral pool
+            if int(self.total_collateral_locked) >= bond_val:
+                self.total_collateral_locked -= u256(bond_val)
+
             self.challenges[c_id] = c_rec
 
             return (
                 "CHALLENGE_DISMISSED: " + c_id + " | TargetNode: " + clean_node + " Remains Active | "
-                + "ChallengerBondSlashed: " + str(int(c_rec.challenge_bond))
+                + "ChallengerBondSlashed: " + str(bond_val) + " CreditedToOperator: " + node_rec.operator
             )
 
     # --------------------------------------------------------------------------
@@ -1054,10 +1083,11 @@ class DePINHardwareSlaSovereign(gl.Contract):
         assert l_id in self.leases, "[ERR_LEASE_NOT_FOUND] Specified lease ID does not exist."
         lease_rec = self.leases[l_id]
 
+        node_rec = self.nodes[clean_node]
         assert clean_op == lease_rec.operator, \
             "[ERR_AUTH_OPERATOR] Only the depositing operator can reclaim rejected lease collateral."
 
-        assert lease_rec.status == "REJECTED_DEFICIENT", \
+        assert lease_rec.status == "REJECTED_DEFICIENT" or (node_rec.status == "SLASHED_JAILED" and lease_rec.status == "PENDING_AUDIT"), \
             "[ERR_INVALID_STATUS] Lease is not in REJECTED_DEFICIENT state (Current: " + lease_rec.status + ")."
 
         assert lease_rec.lease_hash.lower() == clean_exp_hash, \
@@ -1074,6 +1104,11 @@ class DePINHardwareSlaSovereign(gl.Contract):
         lease_rec.consumed_by = clean_op
         lease_rec.status = "SETTLED_REFUNDED"
         self.consumed_lease_hashes[lease_rec.lease_hash.lower()] = True
+
+        if node_rec.active_lease_id == l_id:
+            node_rec.active_lease_id = "NONE"
+            node_rec.active_tier = "NONE"
+            self.nodes[clean_node] = node_rec
 
         if int(self.total_collateral_locked) >= stake_refund:
             self.total_collateral_locked -= u256(stake_refund)

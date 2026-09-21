@@ -15,10 +15,10 @@ Unlike traditional two-party dispute courts, binary prediction bets, or simple e
 | Parameter | Value |
 | :--- | :--- |
 | **Contract Name** | `DePINHardwareSlaSovereign` |
-| **Contract Address** | [`0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc`](https://explorer-studio.genlayer.com/address/0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc) |
-| **Deployment Tx Hash** | `0x7577334f176cb3e5b30d52df0624da14741911dd4d0b75241476af086d580f7e` |
+| **Contract Address** | [`0x2ADBFA142AF09E420c4BDD3C1617e6761C5149aa`](https://explorer-studio.genlayer.com/address/0x2ADBFA142AF09E420c4BDD3C1617e6761C5149aa) |
+| **Deployment Tx Hash** | `0x1f7ec0b4a1a092cec297f5ed240e6c450bf84804e7e9a027e333428e97ba12c2` |
 | **Receipt Status** | `7` (`FINALIZED`) |
-| **Explorer Link** | [https://explorer-studio.genlayer.com/address/0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc](https://explorer-studio.genlayer.com/address/0x7a67c62792Dffb8cdB4EBc2874858ed79d8418fc) |
+| **Explorer Link** | [https://explorer-studio.genlayer.com/address/0x2ADBFA142AF09E420c4BDD3C1617e6761C5149aa](https://explorer-studio.genlayer.com/address/0x2ADBFA142AF09E420c4BDD3C1617e6761C5149aa) |
 | **RPC Endpoint** | `https://studio.genlayer.com/api` |
 | **Public Gateway Check** | `check_node_sla_compliance(0x2222..., TIER_3)` $\to$ `True` (Verified Live) |
 
