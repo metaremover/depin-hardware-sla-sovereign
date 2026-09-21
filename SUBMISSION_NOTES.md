@@ -1,9 +1,13 @@
-Persistent on-chain Access Control Layer & Hardware SLA Compliance Engine for DePIN & GPU compute clusters. Reusable infrastructure primitive replacing the two-party court/escrow pattern.
+### PROTOCOL SPECIFICATION: DePIN Compute SLA Verifier
 
-Key Invariants:
-1. 4-Tier Compute Staking: Clusters lease SLA tiers (STANDARD_CPU to HPC_DISTRIBUTED) backed by native GEN collateral escrowed strictly via @gl.public.write.payable (gl.message.value).
-2. Autonomous Telemetry Audit: Ingests Prometheus metrics evaluated across 4 pillars (uptime, FLOPS, thermals, packet loss). Score >= 800 certifies SLA.
-3. Fail-Closed Invariant: Reverts with [ERR_EVIDENCE_FETCH_FAILED] on failed/empty telemetry, mutating zero state.
-4. Non-Admin Block Time: Expirations evaluate strictly against consensus block time (datetime.now).
-5. Public Gateway: check_node_sla_compliance() provides real-time verification for external AI job routers.
-6. Slashing Bounty: Whistleblowers submit breach proofs; confirmed breaches slash 90% collateral via emit_transfer().
+**Purpose:** Autonomous validator-driven QoS verification and economic bonding engine for decentralized physical compute providers.
+
+**State Machine & Flow:**
+→ Cluster Registration: Operator binds hardware profile and benchmark SHA-256 manifest.
+→ Staked Escrow: Nodes lock native GEN collateral via payable transactions (`gl.message.value`) to activate Tier 1-4 compute capacity.
+→ Telemetry Auditing: GenLayer consensus ingests live hardware uptime metrics; fail-closed execution halts mutations on network errors.
+→ Non-Admin Timing: Expiry and grace periods compute strictly from consensus block timestamps.
+→ Slashing & Settlement: Verified downtime distributes 90% node stake to aggrieved dispatchers while preserving a 10% protocol maintenance fee.
+→ Query Hook: External dispatchers call `check_node_sla_compliance()` for sub-second verification.
+
+**Studio Address:** 0x2ADBFA142AF09E420c4BDD3C1617e6761C5149aa
